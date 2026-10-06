@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018-2026 Velocity Contributors
+ * Copyright (C) 2018-2022 Velocity Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,9 +38,6 @@ import org.junit.jupiter.api.condition.EnabledOnOs;
 
 class VelocityCompressorTest {
 
-  /**
-   * Test data buffer filled with random bytes for compression testing.
-   */
   private static final byte[] TEST_DATA = new byte[1 << 14];
 
   @BeforeAll
@@ -67,6 +64,12 @@ class VelocityCompressorTest {
   }
 
   @Test
+  @EnabledOnOs({LINUX})
+  void nativeSupportsLevelZero() throws DataFormatException {
+    check(Natives.compress.get().create(0), () -> Unpooled.directBuffer(TEST_DATA.length + 32));
+  }
+
+  @Test
   void javaIntegrityCheckDirect() throws DataFormatException {
     VelocityCompressor compressor = JavaVelocityCompressor.FACTORY
         .create(Deflater.DEFAULT_COMPRESSION);
@@ -77,6 +80,22 @@ class VelocityCompressorTest {
   void javaIntegrityCheckHeap() throws DataFormatException {
     VelocityCompressor compressor = JavaVelocityCompressor.FACTORY
         .create(Deflater.DEFAULT_COMPRESSION);
+    check(compressor, () -> Unpooled.buffer(TEST_DATA.length + 32));
+  }
+
+  @Test
+  void javaDeflateRecoversAfterFailedCall() throws DataFormatException {
+    VelocityCompressor compressor = JavaVelocityCompressor.FACTORY
+        .create(Deflater.DEFAULT_COMPRESSION);
+    ByteBuf source = Unpooled.buffer().writeBytes(TEST_DATA);
+    ByteBuf tooSmall = Unpooled.buffer(16, 16);
+    try {
+      assertThrows(IndexOutOfBoundsException.class, () -> compressor.deflate(source, tooSmall));
+    } finally {
+      source.release();
+      tooSmall.release();
+    }
+
     check(compressor, () -> Unpooled.buffer(TEST_DATA.length + 32));
   }
 
